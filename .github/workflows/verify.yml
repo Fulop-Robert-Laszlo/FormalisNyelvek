@@ -1,0 +1,20 @@
+name: Grade solution
+on:
+  - push
+  - repository_dispatch
+permissions:
+  checks: write
+  actions: read
+  contents: read
+jobs:
+  grade:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup grader
+        run: |
+          curl -H 'Cache-Control: no-cache, no-store' -SsL https://naghi.me/assets/py/evaluate_formal.py -O
+      - name: Grade solution based on tests
+        run: |
+          python3 evaluate_formal.py
