@@ -413,7 +413,7 @@ int DfaProblem::run_mini(const cxxopts::ParseResult &args) {
     return 0;
 }
 
-// ==================== 4. FELADAT: REGEXEK (ÚJ) ====================
+// ==================== 4. FELADAT: REGEXEK  ====================
 int DfaProblem::run_rgx(const cxxopts::ParseResult &args) {
     int task_num = args["rgx"].as<int>();
     std::string inputFilename = args["input"].as<std::string>();
@@ -433,23 +433,22 @@ int DfaProblem::run_rgx(const cxxopts::ParseResult &args) {
     if (task_num == 1) {
         int c1 = 0, c2 = 0, c3 = 0, c4 = 0, c5 = 0, c6 = 0, c7 = 0, c8 = 0, c9 = 0, c10 = 0;
         
-        // Előre lefordított regexek a szabályokhoz (csak regex keresés használata engedélyezett)
+        // Szigorú regex_match helyett regex_search-re (tartalmazásra) optimalizált minták
         std::regex rx1("10-15");
-        std::regex rx2(R"(10:18:51\..*)");
-        std::regex rx3(R"(\d{2}:\d{2}:51\..*)");
+        std::regex rx2("10:18:51");
+        std::regex rx3(R"(\d{2}:\d{2}:51)");
         std::regex rx4("lowmemorykiller");
-        std::regex rx5("221");
-        std::regex rx6("E");
-        std::regex rx7("W");
+        std::regex rx5("^221$"); // PID pontos egyezése
+        std::regex rx6("^E$");
+        std::regex rx7("^W$");
         std::regex rx8("PackageManager");
-        std::regex rx9("D");
+        std::regex rx9("^D$");
         std::regex rx10("ExoPlayer");
-        std::regex rx11(R"(.*\.java:.*)");
-        std::regex rx12(R"(.*Thread.*)");
+        std::regex rx11(R"(\.java:)");
+        std::regex rx12("Thread");
 
         while (std::getline(inputFile, line)) {
             if (std::regex_search(line, m, log_regex)) {
-                // Csoportok kiszedése a Regexből
                 std::string date = m[1].str();
                 std::string time = m[2].str();
                 std::string pid = m[3].str();
@@ -457,17 +456,17 @@ int DfaProblem::run_rgx(const cxxopts::ParseResult &args) {
                 std::string tag = m[6].str();
                 std::string msg = m[7].str();
 
-                // 1-10 feltétel vizsgálata std::regex_match segítségével
-                if (std::regex_match(date, rx1)) c1++;
-                if (std::regex_match(date, rx1) && std::regex_match(time, rx2)) c2++;
-                if (std::regex_match(time, rx3)) c3++;
-                if (std::regex_match(tag, rx4)) c4++;
-                if (std::regex_match(time, rx2) && std::regex_match(pid, rx5)) c5++;
-                if (std::regex_match(level, rx6)) c6++;
-                if (std::regex_match(level, rx7) && std::regex_match(tag, rx8)) c7++;
-                if (std::regex_match(level, rx9) && std::regex_match(tag, rx10)) c8++;
-                if ((std::regex_match(level, rx6) || std::regex_match(level, rx7)) && std::regex_match(msg, rx11)) c9++;
-                if (std::regex_match(msg, rx12)) c10++;
+                // regex_search ("tartalmazza") használata
+                if (std::regex_search(date, rx1)) c1++;
+                if (std::regex_search(date, rx1) && std::regex_search(time, rx2)) c2++;
+                if (std::regex_search(time, rx3)) c3++;
+                if (std::regex_search(tag, rx4)) c4++;
+                if (std::regex_search(time, rx2) && std::regex_search(pid, rx5)) c5++;
+                if (std::regex_search(level, rx6)) c6++;
+                if (std::regex_search(level, rx7) && std::regex_search(tag, rx8)) c7++;
+                if (std::regex_search(level, rx9) && std::regex_search(tag, rx10)) c8++;
+                if ((std::regex_search(level, rx6) || std::regex_search(level, rx7)) && std::regex_search(msg, rx11)) c9++;
+                if (std::regex_search(msg, rx12)) c10++;
             }
         }
         outputFile << c1 << "\n" << c2 << "\n" << c3 << "\n" << c4 << "\n" << c5 << "\n"
@@ -480,7 +479,6 @@ int DfaProblem::run_rgx(const cxxopts::ParseResult &args) {
                 if (m[5].str() == "E") {
                     std::string msg = m[7].str();
                     std::smatch match_file;
-                    // Ha a hiba üzenetében van java fájlnév, akkor kinyerjük
                     if (std::regex_search(msg, match_file, file_regex)) {
                         outputFile << match_file[1].str() << "\n";
                     }
@@ -504,7 +502,7 @@ int DfaProblem::run_rgx(const cxxopts::ParseResult &args) {
     }
     else if (task_num == 4) {
         std::map<std::string, int> err_counts;
-        std::vector<std::string> order; // Segít eldönteni ki volt előbb
+        std::vector<std::string> order;
         while (std::getline(inputFile, line)) {
             if (std::regex_search(line, m, log_regex)) {
                 if (m[5].str() == "E") {
@@ -528,7 +526,6 @@ int DfaProblem::run_rgx(const cxxopts::ParseResult &args) {
         int main_thread_errors = 0;
         while (std::getline(inputFile, line)) {
             if (std::regex_search(line, m, log_regex)) {
-                // Ha hiba van és a Process ID egyezik a Thread ID-val
                 if (m[5].str() == "E" && m[3].str() == m[4].str()) {
                     main_thread_errors++;
                 }
