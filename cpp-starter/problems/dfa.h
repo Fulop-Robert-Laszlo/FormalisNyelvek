@@ -12,6 +12,7 @@ public:
 private:
     int run_check(const cxxopts::ParseResult &args);
     int run_det(const cxxopts::ParseResult &args);
+    int run_mini(const cxxopts::ParseResult &args);
 };
 
 #endif // PROBLEMS_DFA_H
