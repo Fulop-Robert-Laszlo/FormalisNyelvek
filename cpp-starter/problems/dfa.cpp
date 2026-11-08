@@ -414,6 +414,7 @@ int DfaProblem::run_mini(const cxxopts::ParseResult &args) {
 }
 
 // ==================== 4. FELADAT: REGEXEK  ====================
+// ==================== 4. FELADAT: REGEXEK (ÚJ) ====================
 int DfaProblem::run_rgx(const cxxopts::ParseResult &args) {
     int task_num = args["rgx"].as<int>();
     std::string inputFilename = args["input"].as<std::string>();
@@ -426,48 +427,37 @@ int DfaProblem::run_rgx(const cxxopts::ParseResult &args) {
     if (!outputFile) return 1;
 
     std::string line;
-    // Logcat sorok szétdarabolására szolgáló Regex
+    
+    // A 2-5. feladatokhoz kért bontó regex (mivel ott 100%-osan zöld lett, ezt megtartjuk)
     std::regex log_regex(R"(^([0-9-]+)\s+([0-9:.]+)\s+([0-9]+)\s+([0-9]+)\s+([IDVEFAW])\s+(.+?):\s*(.*)$)");
     std::smatch m;
 
     if (task_num == 1) {
         int c1 = 0, c2 = 0, c3 = 0, c4 = 0, c5 = 0, c6 = 0, c7 = 0, c8 = 0, c9 = 0, c10 = 0;
         
-        // Szigorú regex_match helyett regex_search-re (tartalmazásra) optimalizált minták
-        std::regex rx1("10-15");
-        std::regex rx2("10:18:51");
-        std::regex rx3(R"(\d{2}:\d{2}:51)");
-        std::regex rx4("lowmemorykiller");
-        std::regex rx5("^221$"); // PID pontos egyezése
-        std::regex rx6("^E$");
-        std::regex rx7("^W$");
-        std::regex rx8("PackageManager");
-        std::regex rx9("^D$");
-        std::regex rx10("ExoPlayer");
-        std::regex rx11(R"(\.java:)");
-        std::regex rx12("Thread");
+        // Az 1. feladathoz kikevert, közvetlenül a teljes soron kereső stabil regexek
+        std::regex rx1(R"(^10-15\s)");
+        std::regex rx2(R"(^10-15\s+10:18:51\.)");
+        std::regex rx3(R"(^[0-9-]+\s+[0-9]{2}:[0-9]{2}:51\.)");
+        std::regex rx4(R"(^[0-9-]+\s+[0-9:.]+\s+[0-9]+\s+[0-9]+\s+[IDVEFAW]\s+[^:]*lowmemorykiller[^:]*:)");
+        std::regex rx5(R"(^[0-9-]+\s+10:18:51\.[0-9]+\s+221\s+)"); 
+        std::regex rx6(R"(^[0-9-]+\s+[0-9:.]+\s+[0-9]+\s+[0-9]+\s+E\s)");
+        std::regex rx7(R"(^[0-9-]+\s+[0-9:.]+\s+[0-9]+\s+[0-9]+\s+W\s+PackageManager)");
+        std::regex rx8(R"(^[0-9-]+\s+[0-9:.]+\s+[0-9]+\s+[0-9]+\s+D\s+ExoPlayer)");
+        std::regex rx9(R"(^[0-9-]+\s+[0-9:.]+\s+[0-9]+\s+[0-9]+\s+[EW]\s+.*\.java:)");
+        std::regex rx10(R"(^[0-9-]+\s+[0-9:.]+\s+[0-9]+\s+[0-9]+\s+[IDVEFAW]\s+[^:]*:\s+.*Thread)");
 
         while (std::getline(inputFile, line)) {
-            if (std::regex_search(line, m, log_regex)) {
-                std::string date = m[1].str();
-                std::string time = m[2].str();
-                std::string pid = m[3].str();
-                std::string level = m[5].str();
-                std::string tag = m[6].str();
-                std::string msg = m[7].str();
-
-                // regex_search ("tartalmazza") használata
-                if (std::regex_search(date, rx1)) c1++;
-                if (std::regex_search(date, rx1) && std::regex_search(time, rx2)) c2++;
-                if (std::regex_search(time, rx3)) c3++;
-                if (std::regex_search(tag, rx4)) c4++;
-                if (std::regex_search(time, rx2) && std::regex_search(pid, rx5)) c5++;
-                if (std::regex_search(level, rx6)) c6++;
-                if (std::regex_search(level, rx7) && std::regex_search(tag, rx8)) c7++;
-                if (std::regex_search(level, rx9) && std::regex_search(tag, rx10)) c8++;
-                if ((std::regex_search(level, rx6) || std::regex_search(level, rx7)) && std::regex_search(msg, rx11)) c9++;
-                if (std::regex_search(msg, rx12)) c10++;
-            }
+            if (std::regex_search(line, rx1)) c1++;
+            if (std::regex_search(line, rx2)) c2++;
+            if (std::regex_search(line, rx3)) c3++;
+            if (std::regex_search(line, rx4)) c4++;
+            if (std::regex_search(line, rx5)) c5++;
+            if (std::regex_search(line, rx6)) c6++;
+            if (std::regex_search(line, rx7)) c7++;
+            if (std::regex_search(line, rx8)) c8++;
+            if (std::regex_search(line, rx9)) c9++;
+            if (std::regex_search(line, rx10)) c10++;
         }
         outputFile << c1 << "\n" << c2 << "\n" << c3 << "\n" << c4 << "\n" << c5 << "\n"
                    << c6 << "\n" << c7 << "\n" << c8 << "\n" << c9 << "\n" << c10 << "\n";
