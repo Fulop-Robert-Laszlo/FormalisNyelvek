@@ -8,28 +8,25 @@
 #include <map>
 #include <queue>
 #include <algorithm>
+#include <regex>
 
 void DfaProblem::initialize_parser(cxxopts::Options &options) {
     options.add_options()
         ("check", "Check words with the DFA", cxxopts::value<std::string>())
         ("det", "Determinize the automaton")
-        ("mini", "Minimize the automaton");
+        ("mini", "Minimize the automaton")
+        ("rgx", "Regex parsing", cxxopts::value<int>());
 }
 
 bool DfaProblem::is_chosen_problem(const cxxopts::ParseResult &args) {
-    return args.count("check") > 0 || args.count("det") > 0 || args.count("mini") > 0;
+    return args.count("check") > 0 || args.count("det") > 0 || args.count("mini") > 0 || args.count("rgx") > 0;
 }
 
 int DfaProblem::run(const cxxopts::ParseResult &args) {
-    if (args.count("check") > 0) {
-        return run_check(args);
-    }
-    if (args.count("det") > 0) {
-        return run_det(args);
-    }
-    if (args.count("mini") > 0) {
-        return run_mini(args);
-    }
+    if (args.count("check") > 0) return run_check(args);
+    if (args.count("det") > 0) return run_det(args);
+    if (args.count("mini") > 0) return run_mini(args);
+    if (args.count("rgx") > 0) return run_rgx(args);
     return 1;
 }
 
@@ -255,43 +252,29 @@ int DfaProblem::run_mini(const cxxopts::ParseResult &args) {
     if (!inputFile) return 1;
 
     std::string line;
-
-    // 1. Állapotok beolvasása (validációs halmazzal)
     if (!std::getline(inputFile, line)) return 1;
     std::vector<std::string> states;
     std::set<std::string> validStates;
     {
         std::istringstream ss(line);
         std::string s;
-        while (ss >> s) {
-            states.push_back(s);
-            validStates.insert(s);
-        }
+        while (ss >> s) { states.push_back(s); validStates.insert(s); }
     }
 
-    // 2. Ábécé beolvasása
     if (!std::getline(inputFile, line)) return 1;
     std::vector<std::string> alphabet;
     std::set<std::string> validAlphabet;
     {
         std::istringstream ss(line);
         std::string sym;
-        while (ss >> sym) {
-            alphabet.push_back(sym);
-            validAlphabet.insert(sym);
-        }
+        while (ss >> sym) { alphabet.push_back(sym); validAlphabet.insert(sym); }
     }
 
-    // 3. Kezdőállapot
     if (!std::getline(inputFile, line)) return 1;
     std::string startState;
-    {
-        std::istringstream ss(line);
-        if (!(ss >> startState)) return 1;
-    }
+    { std::istringstream ss(line); if (!(ss >> startState)) return 1; }
     if (validStates.find(startState) == validStates.end()) return 1;
 
-    // 4. Végállapotok
     if (!std::getline(inputFile, line)) return 1;
     std::set<std::string> acceptStates;
     {
@@ -303,70 +286,46 @@ int DfaProblem::run_mini(const cxxopts::ParseResult &args) {
         }
     }
 
-    // Átmenetek beolvasása hibakezeléssel
     std::map<std::pair<std::string, std::string>, std::string> transitions;
     while (std::getline(inputFile, line)) {
         if (line.empty()) continue;
         std::istringstream ss(line);
         std::string fromState, symbol, toState;
         if (!(ss >> fromState >> symbol >> toState)) return 1;
-
         if (validStates.find(fromState) == validStates.end() ||
             validStates.find(toState) == validStates.end() ||
             validAlphabet.find(symbol) == validAlphabet.end()) return 1;
-
         transitions[{fromState, symbol}] = toState;
     }
     inputFile.close();
 
-    // ================== MYHILL-NERODE TÁBLÁZATOS ALGORITMUS ==================
-    // Megfelel az elküldött képen látható táblázatos/lépcsős levezetésnek
     int n = states.size();
-    
-    // table[i][j] igaz (true) lesz, ha states[i] és states[j] megkülönböztethető ("x" került a táblázatba)
     std::vector<std::vector<bool>> table(n, std::vector<bool>(n, false));
 
-    // 1. lépés (Alapeset / egyenlőségvizsgálat): 
-    // Ha egyik elfogadó, a másik nem, akkor egyből különböznek.
     for (int i = 0; i < n; ++i) {
         for (int j = i + 1; j < n; ++j) {
             bool iAccepts = acceptStates.find(states[i]) != acceptStates.end();
             bool jAccepts = acceptStates.find(states[j]) != acceptStates.end();
-            if (iAccepts != jAccepts) {
-                table[i][j] = true;
-                table[j][i] = true;
-            }
+            if (iAccepts != jAccepts) { table[i][j] = true; table[j][i] = true; }
         }
     }
 
-    // 2. lépés (Folyamatos kitöltés / táblázat frissítése):
-    // Addig iterálunk, amíg a táblázatban nem tudunk új "x"-et beírni (nincs változás).
     bool changed;
     do {
         changed = false;
         for (int i = 0; i < n; ++i) {
             for (int j = i + 1; j < n; ++j) {
-                if (!table[i][j]) { // Ha MÉG NEM különböznek
-                    // Vizsgáljuk meg minden betűre, hogy hová visz az átmenet
+                if (!table[i][j]) {
                     for (const std::string& sym : alphabet) {
                         auto itI = transitions.find({states[i], sym});
                         auto itJ = transitions.find({states[j], sym});
-                        
-                        // Ha mindkettőnek van átmenete, megnézzük, hová mutat
                         if (itI != transitions.end() && itJ != transitions.end()) {
                             std::string nextI = itI->second;
                             std::string nextJ = itJ->second;
-                            
-                            // Megkeressük a következő állapotok indexeit a states vektorban
                             int idxI = std::distance(states.begin(), std::find(states.begin(), states.end(), nextI));
                             int idxJ = std::distance(states.begin(), std::find(states.begin(), states.end(), nextJ));
-                            
-                            // Ha a célállapotok MÁR meg vannak különböztetve, akkor ezek az állapotok is különböznek
                             if (table[idxI][idxJ]) {
-                                table[i][j] = true;
-                                table[j][i] = true;
-                                changed = true;
-                                break; // Egy elég a megkülönböztetéshez
+                                table[i][j] = true; table[j][i] = true; changed = true; break;
                             }
                         }
                     }
@@ -375,70 +334,43 @@ int DfaProblem::run_mini(const cxxopts::ParseResult &args) {
         }
     } while (changed);
 
-    // ================== ÖSSZEVONÁS ÉS ÚJRANEVEZÉS ==================
-    // Ha table[i][j] maradt false, akkor states[i] és states[j] ekvivalens, tehát összevonhatók.
-    // A feladat szerint a legkisebb indexű (q sorszám) állapot nevét kapja az összevont csoport.
-    
-    // create mapping from original state to its representative
     std::map<std::string, std::string> representative;
-    for (int i = 0; i < n; ++i) {
-        representative[states[i]] = states[i]; // Kezdetben önmaga a képviselő
-    }
+    for (int i = 0; i < n; ++i) representative[states[i]] = states[i];
 
     for (int i = 0; i < n; ++i) {
         for (int j = i + 1; j < n; ++j) {
             if (!table[i][j]) {
-                // states[i] és states[j] egyenértékűek.
                 std::string rootI = representative[states[i]];
                 std::string rootJ = representative[states[j]];
-                
-                // Mivel a states tömb a bemenet alapján (q0, q1...) van feltöltve,
-                // az elején lévők a kisebb sorszámúak, így ha kisebbet találunk, azt tesszük meg gyökérnek.
                 if (rootI != rootJ) {
                     std::string newRoot = (rootI < rootJ) ? rootI : rootJ;
-                    // Mindenkinek, aki rootI vagy rootJ volt, beállítjuk az újat
                     for (auto& pair : representative) {
-                        if (pair.second == rootI || pair.second == rootJ) {
-                            pair.second = newRoot;
-                        }
+                        if (pair.second == rootI || pair.second == rootJ) pair.second = newRoot;
                     }
                 }
             }
         }
     }
 
-    // Új állapotok összegyűjtése és "s"-formátumra konvertálása
     std::set<std::string> minimalStates;
-    for (const auto& s : states) {
-        minimalStates.insert(representative[s]);
-    }
+    for (const auto& s : states) minimalStates.insert(representative[s]);
 
-    // Létrehozunk egy q -> s map-et, hogy pl. "q1" -> "s1" legyen.
-    // A feladat szerint ha a képviselő "q1", a kimeneti név "s1" kell hogy legyen.
     std::map<std::string, std::string> newNames;
     for (const std::string& state : minimalStates) {
-        std::string numPart = state.substr(1); // Levágja a 'q'-t
+        std::string numPart = state.substr(1);
         newNames[state] = "s" + numPart;
     }
 
     std::vector<std::string> outStates;
-    for (const std::string& state : minimalStates) {
-        outStates.push_back(newNames[state]);
-    }
-    std::sort(outStates.begin(), outStates.end()); // ábécé sorrend miatt
+    for (const std::string& state : minimalStates) outStates.push_back(newNames[state]);
+    std::sort(outStates.begin(), outStates.end());
 
-    // Kezdőállapot meghatározása (az eredeti kezdőállapot képviselője, 's'-es formában)
     std::string outStart = newNames[representative[startState]];
-
-    // Végállapotok meghatározása (ha a képviselő egy eredeti elfogadó állapot, az egész csoport elfogadó)
     std::set<std::string> outAcceptSet;
-    for (const std::string& accept : acceptStates) {
-        outAcceptSet.insert(newNames[representative[accept]]);
-    }
+    for (const std::string& accept : acceptStates) outAcceptSet.insert(newNames[representative[accept]]);
     std::vector<std::string> outAccepts(outAcceptSet.begin(), outAcceptSet.end());
     std::sort(outAccepts.begin(), outAccepts.end());
 
-    // Átmenetek átszámítása az összevont állapotokra
     struct Edge {
         std::string from; std::string sym; std::string to;
         bool operator<(const Edge& other) const {
@@ -447,54 +379,162 @@ int DfaProblem::run_mini(const cxxopts::ParseResult &args) {
             return to < other.to;
         }
     };
-    std::set<Edge> minimalEdgesSet; // A set megakadályozza a duplikációt
+    std::set<Edge> minimalEdgesSet;
     for (const auto& trans : transitions) {
         std::string fromOrig = trans.first.first;
         std::string sym = trans.first.second;
         std::string toOrig = trans.second;
-
         std::string fromNew = newNames[representative[fromOrig]];
         std::string toNew = newNames[representative[toOrig]];
-        
         minimalEdgesSet.insert({fromNew, sym, toNew});
     }
 
     std::vector<Edge> outEdges(minimalEdgesSet.begin(), minimalEdgesSet.end());
-    // std::set alapból rendezi a fenti < operátor szerint, de biztos ami biztos:
     std::sort(outEdges.begin(), outEdges.end());
 
-    // ================== EREDMÉNY KIÍRÁSA A MEGADOTT FORMÁTUMBA ==================
     std::ofstream outputFile(outputFilename);
     if (!outputFile) return 1;
 
-    // 1. sor: Állapotok (s formában)
-    for (size_t i = 0; i < outStates.size(); ++i) {
-        outputFile << outStates[i] << (i + 1 < outStates.size() ? " " : "");
-    }
+    for (size_t i = 0; i < outStates.size(); ++i) outputFile << outStates[i] << (i + 1 < outStates.size() ? " " : "");
     outputFile << "\n";
-
-    // 2. sor: Ábécé
-    // Itt a validAlphabet halmazt használjuk a kiíráshoz, hogy ábécé sorrendben maradjon
     size_t idx = 0;
     for (const std::string& sym : validAlphabet) {
-        outputFile << sym << (idx + 1 < validAlphabet.size() ? " " : "");
-        idx++;
+        outputFile << sym << (idx + 1 < validAlphabet.size() ? " " : ""); idx++;
     }
+    outputFile << "\n" << outStart << "\n";
+    for (size_t i = 0; i < outAccepts.size(); ++i) outputFile << outAccepts[i] << (i + 1 < outAccepts.size() ? " " : "");
     outputFile << "\n";
-
-    // 3. sor: Kezdőállapot
-    outputFile << outStart << "\n";
-
-    // 4. sor: Végállapotok
-    for (size_t i = 0; i < outAccepts.size(); ++i) {
-        outputFile << outAccepts[i] << (i + 1 < outAccepts.size() ? " " : "");
-    }
-    outputFile << "\n";
-
-    // Átmenetek sorban
     for (size_t i = 0; i < outEdges.size(); ++i) {
         outputFile << outEdges[i].from << " " << outEdges[i].sym << " " << outEdges[i].to;
         if (i + 1 < outEdges.size()) outputFile << "\n";
+    }
+
+    outputFile.close();
+    return 0;
+}
+
+// ==================== 4. FELADAT: REGEXEK (ÚJ) ====================
+int DfaProblem::run_rgx(const cxxopts::ParseResult &args) {
+    int task_num = args["rgx"].as<int>();
+    std::string inputFilename = args["input"].as<std::string>();
+    std::string outputFilename = args["output"].as<std::string>();
+
+    std::ifstream inputFile(inputFilename);
+    if (!inputFile) return 1;
+
+    std::ofstream outputFile(outputFilename);
+    if (!outputFile) return 1;
+
+    std::string line;
+    // Logcat sorok szétdarabolására szolgáló Regex
+    std::regex log_regex(R"(^([0-9-]+)\s+([0-9:.]+)\s+([0-9]+)\s+([0-9]+)\s+([IDVEFAW])\s+(.+?):\s*(.*)$)");
+    std::smatch m;
+
+    if (task_num == 1) {
+        int c1 = 0, c2 = 0, c3 = 0, c4 = 0, c5 = 0, c6 = 0, c7 = 0, c8 = 0, c9 = 0, c10 = 0;
+        
+        // Előre lefordított regexek a szabályokhoz (csak regex keresés használata engedélyezett)
+        std::regex rx1("10-15");
+        std::regex rx2(R"(10:18:51\..*)");
+        std::regex rx3(R"(\d{2}:\d{2}:51\..*)");
+        std::regex rx4("lowmemorykiller");
+        std::regex rx5("221");
+        std::regex rx6("E");
+        std::regex rx7("W");
+        std::regex rx8("PackageManager");
+        std::regex rx9("D");
+        std::regex rx10("ExoPlayer");
+        std::regex rx11(R"(.*\.java:.*)");
+        std::regex rx12(R"(.*Thread.*)");
+
+        while (std::getline(inputFile, line)) {
+            if (std::regex_search(line, m, log_regex)) {
+                // Csoportok kiszedése a Regexből
+                std::string date = m[1].str();
+                std::string time = m[2].str();
+                std::string pid = m[3].str();
+                std::string level = m[5].str();
+                std::string tag = m[6].str();
+                std::string msg = m[7].str();
+
+                // 1-10 feltétel vizsgálata std::regex_match segítségével
+                if (std::regex_match(date, rx1)) c1++;
+                if (std::regex_match(date, rx1) && std::regex_match(time, rx2)) c2++;
+                if (std::regex_match(time, rx3)) c3++;
+                if (std::regex_match(tag, rx4)) c4++;
+                if (std::regex_match(time, rx2) && std::regex_match(pid, rx5)) c5++;
+                if (std::regex_match(level, rx6)) c6++;
+                if (std::regex_match(level, rx7) && std::regex_match(tag, rx8)) c7++;
+                if (std::regex_match(level, rx9) && std::regex_match(tag, rx10)) c8++;
+                if ((std::regex_match(level, rx6) || std::regex_match(level, rx7)) && std::regex_match(msg, rx11)) c9++;
+                if (std::regex_match(msg, rx12)) c10++;
+            }
+        }
+        outputFile << c1 << "\n" << c2 << "\n" << c3 << "\n" << c4 << "\n" << c5 << "\n"
+                   << c6 << "\n" << c7 << "\n" << c8 << "\n" << c9 << "\n" << c10 << "\n";
+    }
+    else if (task_num == 2) {
+        std::regex file_regex(R"(([a-zA-Z0-9_$-]+\.java))");
+        while (std::getline(inputFile, line)) {
+            if (std::regex_search(line, m, log_regex)) {
+                if (m[5].str() == "E") {
+                    std::string msg = m[7].str();
+                    std::smatch match_file;
+                    // Ha a hiba üzenetében van java fájlnév, akkor kinyerjük
+                    if (std::regex_search(msg, match_file, file_regex)) {
+                        outputFile << match_file[1].str() << "\n";
+                    }
+                }
+            }
+        }
+    }
+    else if (task_num == 3) {
+        std::vector<std::string> order;
+        std::set<std::string> seen;
+        while (std::getline(inputFile, line)) {
+            if (std::regex_search(line, m, log_regex)) {
+                std::string pid = m[3].str();
+                if (seen.find(pid) == seen.end()) {
+                    seen.insert(pid);
+                    order.push_back(pid);
+                }
+            }
+        }
+        for (const auto& p : order) outputFile << p << "\n";
+    }
+    else if (task_num == 4) {
+        std::map<std::string, int> err_counts;
+        std::vector<std::string> order; // Segít eldönteni ki volt előbb
+        while (std::getline(inputFile, line)) {
+            if (std::regex_search(line, m, log_regex)) {
+                if (m[5].str() == "E") {
+                    std::string pid = m[3].str();
+                    if (err_counts.find(pid) == err_counts.end()) order.push_back(pid);
+                    err_counts[pid]++;
+                }
+            }
+        }
+        std::string max_pid = "";
+        int max_err = -1;
+        for (const auto& p : order) {
+            if (err_counts[p] > max_err) {
+                max_err = err_counts[p];
+                max_pid = p;
+            }
+        }
+        if (max_err != -1) outputFile << "PID=" << max_pid << " (" << max_err << " errors)\n";
+    }
+    else if (task_num == 5) {
+        int main_thread_errors = 0;
+        while (std::getline(inputFile, line)) {
+            if (std::regex_search(line, m, log_regex)) {
+                // Ha hiba van és a Process ID egyezik a Thread ID-val
+                if (m[5].str() == "E" && m[3].str() == m[4].str()) {
+                    main_thread_errors++;
+                }
+            }
+        }
+        outputFile << main_thread_errors << "\n";
     }
 
     outputFile.close();
